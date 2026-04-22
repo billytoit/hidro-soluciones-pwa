@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="manifest.json">
+    <title>Grupo Hidro | Seguimiento de Obra</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script crossorigin
+        src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+</head>
+
+<body class="dark-theme">
+    <div id="debug-errors"
+        style="display:none; position:fixed; top:0; left:0; width:100%; background: #ff4444; color:white; z-index:9999; padding:20px; font-family:monospace; font-size:12px; border-bottom: 2px solid #800; white-space: pre-wrap;">
+        <b>⚠️ ERROR DETECTADO:</b>
+        <span id="error-msg"></span>
+        <button onclick="this.parentElement.style.display='none'"
+            style="float:right; background:white; border:none; border-radius:4px; padding:4px 12px; cursor:pointer; font-weight:bold;">Cerrar</button>
+    </div>
+
+    <script>
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            document.getElementById('debug-errors').style.display = 'block';
+            var content = msg + "\nArchivo: " + (url ? url.split('/').pop() : 'N/A') + " | Línea: " + lineNo;
+            if (error && error.stack) content += "\n\nStack:\n" + error.stack;
+            document.getElementById('error-msg').innerText = content;
+            return false;
+        };
+        console.log("🟢 HTML: Iniciando carga de scripts...");
+    </script>
+
+    <div id="app">
+        <!-- Rendered by main.js -->
+        <div class="loader-container">
+            <div class="loader"></div>
+            <p>Cargando Grupo Hidro...</p>
+        </div>
+    </div>
+
+    <!-- Modals Container -->
+    <div id="modal-container"></div>
+
+    <!-- Scripts (Ordered for global dependencies) -->
+    <script src="supabase.js"></script>
+    <script src="data.js"></script>
+    <script src="main.js"></script>
+    
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').then(registration => {
+            console.log('SW registered: ', registration.scope);
+          }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+        });
+      }
+    </script>
+</body>
+
+</html>
