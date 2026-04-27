@@ -13,8 +13,18 @@ class DataService {
 
     async getProjects() {
         if (!window.hSupabase) {
-            console.error('Supabase client not initialized');
-            return [];
+            console.warn('Supabase no inicializado, usando fallback');
+            const mock = this.fallbackProjects();
+            const allProjects = [...mock, ...this.demoProjects];
+            this.demoUpdates.forEach(du => {
+                const project = allProjects.find(p => p.id === du.project_id);
+                if (project) {
+                    if(!du.status) du.status = 'pending_supervisor';
+                    project.updates.push(du);
+                }
+            });
+            allProjects.forEach(p => { p.updates.sort((a, b) => new Date(b.date) - new Date(a.date)); });
+            return allProjects;
         }
         const { data, error } = await window.hSupabase
             .from('projects')

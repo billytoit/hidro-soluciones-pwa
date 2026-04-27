@@ -538,6 +538,12 @@ textarea:focus {
     color: white;
 }
 
+.profile-item:hover {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+    transform: translateX(5px);
+}
+
 .loader-small {
     width: 20px;
     height: 20px;

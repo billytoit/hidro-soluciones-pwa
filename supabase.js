@@ -4,5 +4,5 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 if (!window.supabase) {
     console.error('Error: La librería de Supabase no cargó correctamente.');
 }
-// Forzando DEMO MODE para que la aplicación no tenga delay de red
-window.hSupabase = null; // window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+// Re-habilitando conexión real para pruebas de base de datos
+window.hSupabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
