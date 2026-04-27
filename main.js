@@ -136,6 +136,7 @@ function renderAuth() {
 }
 
 // --- CLIENT VIEW ---
+async function renderClientDashboard() {
     if (!state.currentProject) {
         const allProjects = await window.hDataService.getProjects();
         let clientProjects = allProjects.filter(p => p.clientName === state.currentUser.name);
