@@ -558,6 +558,10 @@ class DataService {
     }
 
     async uploadPhoto(file, path) {
+        if (!window.hSupabase) {
+            console.log('Demo Mode: Simulating upload and returning ObjectURL');
+            return URL.createObjectURL(file);
+        }
         const { data, error } = await window.hSupabase.storage
             .from('project_photos')
             .upload(path, file, {
@@ -579,6 +583,10 @@ class DataService {
 
     async deletePhoto(publicUrl) {
         if (!publicUrl || publicUrl.includes('unsplash.com')) return true;
+        if (!window.hSupabase) {
+            console.log('Demo Mode: Simulating photo deletion');
+            return true;
+        }
 
         try {
             // Extract path from public URL
