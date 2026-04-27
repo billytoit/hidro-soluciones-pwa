@@ -145,7 +145,8 @@ function renderAuth() {
             const baseProject = allProjects[0] || { updates: [], clientName: 'Cliente Demo' };
             clientProjects = [
                 { ...baseProject, id: 'proj-1', name: 'Urbanización Los Senderos', progress: 65, status: 'executing' },
-                { ...baseProject, id: 'proj-2', name: 'Torre Empresarial Z', progress: 20, status: 'delayed' }
+                { ...baseProject, id: 'proj-2', name: 'Torre Empresarial Z', progress: 20, status: 'delayed' },
+                { ...baseProject, id: 'proj-3', name: 'Plaza del Sol (Etapa 1)', progress: 100, status: 'completed' }
             ];
             state.clientHasMultipleProjects = true;
         } else {
@@ -495,6 +496,7 @@ function renderAuth() {
 function renderClientHomeDashboard(projects) {
     const active = projects.filter(p => p.status === 'executing').length;
     const delayed = projects.filter(p => p.status === 'delayed').length;
+    const completed = projects.filter(p => p.status === 'completed').length;
     const avgProgress = Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length);
 
     appContainer.innerHTML = `
@@ -516,12 +518,12 @@ function renderClientHomeDashboard(projects) {
                 <h2 style="margin: 4px 0 16px; font-size: 1.5rem; font-weight: 800; color: white;">${state.currentUser.name}</h2>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
-                        <span style="font-size: 1.5rem; font-weight: 800; color: white;">${projects.length}</span>
-                        <p style="margin: 0; font-size: 0.75rem; color: var(--text-dim);">Obras Totales</p>
+                        <span style="font-size: 1.5rem; font-weight: 800; color: white;">${active + delayed}</span>
+                        <p style="margin: 0; font-size: 0.75rem; color: var(--text-dim);">Obras Activas</p>
                     </div>
-                    <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
-                        <span style="font-size: 1.5rem; font-weight: 800; color: var(--primary);">${avgProgress}%</span>
-                        <p style="margin: 0; font-size: 0.75rem; color: var(--text-dim);">Avance Promedio</p>
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); padding: 16px; border-radius: 12px;">
+                        <span style="font-size: 1.5rem; font-weight: 800; color: #10b981;">${completed}</span>
+                        <p style="margin: 0; font-size: 0.75rem; color: #10b981;">Obras Terminadas</p>
                     </div>
                     ${delayed > 0 ? `
                     <div style="grid-column: span 2; background: rgba(239, 68, 68, 0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.2);">
