@@ -8,6 +8,7 @@ window.ProjectStatuses = {
 class DataService {
     constructor() {
         this.demoUpdates = []; // Local cache for demo mode session
+        this.demoProjects = []; // Local cache for created projects in demo
     }
 
     async getProjects() {
@@ -32,16 +33,19 @@ class DataService {
             console.warn('No projects found or error fetching projects, using mock:', error?.message);
             const mock = this.fallbackProjects();
             
+            // Merge Demo Projects
+            const allProjects = [...mock, ...this.demoProjects];
+            
             // Merge Demo Updates if any into mock
             this.demoUpdates.forEach(du => {
-                const project = mock.find(p => p.id === du.project_id);
+                const project = allProjects.find(p => p.id === du.project_id);
                 if (project) {
                     if(!du.status) du.status = 'pending_supervisor';
                     project.updates.push(du);
                 }
             });
-            mock.forEach(p => { p.updates.sort((a, b) => new Date(b.date) - new Date(a.date)); });
-            return mock;
+            allProjects.forEach(p => { p.updates.sort((a, b) => new Date(b.date) - new Date(a.date)); });
+            return allProjects;
         }
 
         // Map Supabase structure to the expected frontend structure
@@ -115,6 +119,8 @@ class DataService {
         return [
             { id: '00000000-0000-0000-0000-000000000003', name: 'Residente Demo', role: 'residente', status: 'active', avatar: '' },
             { id: '00000000-0000-0000-0000-000000000005', name: 'Supervisor Demo', role: 'supervisor', status: 'active', avatar: '' },
+            { id: 'res-2', name: 'Ing. Laura Méndez', role: 'residente', status: 'active', avatar: '' },
+            { id: 'sup-2', name: 'Arq. Roberto Soto', role: 'supervisor', status: 'active', avatar: '' },
             { id: 'maestro-3', name: 'Carlos Martinez', role: 'residente', status: 'inactive', avatar: '' }
         ];
     }
@@ -458,6 +464,23 @@ class DataService {
     }
 
     async addProject(projectData) {
+        if (!window.hSupabase) {
+            const newId = 'demo-' + Math.random().toString(36).substr(2, 9);
+            const newProj = {
+                id: newId,
+                name: projectData.name,
+                clientName: projectData.clientName || 'Cliente Demo',
+                clientAvatar: projectData.clientAvatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=200&auto=format&fit=crop',
+                assignedMaestroId: projectData.assignedMaestroId,
+                status: 'pending',
+                progress: 0,
+                updates: []
+            };
+            this.demoProjects.push(newProj);
+            await this.logActivity('projects', newId, 'CREATE', 'demo-user', `Creación de obra: ${projectData.name}`);
+            return true;
+        }
+
         const { data, error } = await window.hSupabase
             .from('projects')
             .insert([{

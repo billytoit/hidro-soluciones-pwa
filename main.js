@@ -824,56 +824,7 @@ window.HS_openNewWorkerModal = async () => {
     `;
 };
 
-window.HS_openNewProjectModal = async () => {
-    const modal = document.getElementById('modal-container');
-    modal.innerHTML = `
-        <div class="fade-in" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(20px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="glass-card" style="width: 100%; max-width: 500px; padding: 32px; border-radius: 32px; max-height: 90vh; overflow-y: auto;">
-                <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <div>
-                        <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800;">Nueva Obra</h2>
-                        <p class="text-dim" style="font-size: 0.8rem;">Crear y asignar un proyecto</p>
-                    </div>
-                    <button onclick="document.getElementById('modal-container').innerHTML=''" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 44px; height: 44px; border-radius: 50%; cursor: pointer;">&times;</button>
-                </header>
 
-                <div style="display: flex; flex-direction: column; gap: 16px;">
-                    <div>
-                        <label style="display: block; font-size: 0.75rem; font-weight: 800; color: var(--text-dim); margin-bottom: 8px;">NOMBRE DE LA OBRA</label>
-                        <input type="text" id="np-name" placeholder="Ej: Urbanización Los Senderos" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white;">
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: 0.75rem; font-weight: 800; color: var(--text-dim); margin-bottom: 8px;">EMPRESA (HOLDING)</label>
-                        <select id="np-company" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none;">
-                            <option value="hidrosolucion" style="color: black;">HidroSolución (Construcción)</option>
-                            <option value="hidroglobal" style="color: black;">HidroGlobal (Diseño)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: 0.75rem; font-weight: 800; color: var(--text-dim); margin-bottom: 8px;">CLIENTE</label>
-                        <select id="np-client" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none;">
-                            <option value="demo" style="color: black;">Constructora Arkitrust (Demo)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: 0.75rem; font-weight: 800; color: var(--text-dim); margin-bottom: 8px;">RESIDENTE ASIGNADO</label>
-                        <select id="np-residente" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none;">
-                            <option value="demo" style="color: black;">Juan Pérez (Demo)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: 0.75rem; font-weight: 800; color: var(--text-dim); margin-bottom: 8px;">SUPERVISOR ASIGNADO</label>
-                        <select id="np-supervisor" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none;">
-                            <option value="demo" style="color: black;">Supervisor Demo</option>
-                        </select>
-                    </div>
-                    
-                    <button class="btn-primary" onclick="alert('Funcionalidad en construcción. Creará el proyecto y asignará los accesos a los perfiles seleccionados.')" style="margin-top: 16px; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">CREAR OBRA</button>
-                </div>
-            </div>
-        </div>
-    `;
-};
 
 
 // --- ADMIN VIEW ---
@@ -2153,7 +2104,12 @@ window.HS_openNewProjectModal = async () => {
                     <div>
                         <label style="display: block; font-size: 0.7rem; font-weight: 800; margin-bottom: 12px; color: var(--text-dim); text-transform: uppercase;">Asignar Responsable</label>
                         <select id="new-proj-maestro" style="width: 100%; border-radius: 16px; padding: 16px; background: #1e293b; border: 1px solid var(--border); color: white; font-weight: 600;">
-                            ${maestros.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
+                            <optgroup label="RESIDENTES" style="background: #0f172a; color: var(--text-dim);">
+                                ${maestros.filter(m => m.role === 'residente').map(m => `<option value="${m.id}" style="color: white;">${m.name}</option>`).join('')}
+                            </optgroup>
+                            <optgroup label="SUPERVISORES" style="background: #0f172a; color: var(--text-dim);">
+                                ${maestros.filter(m => m.role === 'supervisor').map(m => `<option value="${m.id}" style="color: white;">${m.name}</option>`).join('')}
+                            </optgroup>
                         </select>
                     </div>
 
@@ -2186,6 +2142,8 @@ window.HS_openNewProjectModal = async () => {
 
         const success = await window.hDataService.addProject({
             name: name,
+            clientName: client,
+            clientAvatar: clientAvatar,
             clientId: null, // Need real user IDs now
             assignedMaestroId: maestroId
         });
