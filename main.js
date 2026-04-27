@@ -1246,16 +1246,20 @@ async function HS_compressAndUpload(file, folder = 'updates') {
 
 function HS_showProfilePicker(title, profiles, onSelect) {
     const modal = document.getElementById('modal-container');
+    // Guardamos el callback globalmente de forma temporal para que el onclick lo encuentre
+    window._tempPickerCallback = onSelect;
+    
     modal.innerHTML = `
         <div class="fade-in" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(20px); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="glass-card" style="width: 100%; max-width: 400px; padding: 32px; border-radius: 32px;">
+            <div class="glass-card" style="width: 100%; max-width: 400px; padding: 32px; border-radius: 32px; border: 1px solid rgba(255,255,255,0.1); background: #0f172a;">
                 <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                     <h2 style="margin: 0; font-size: 1.2rem; font-weight: 800;">Elegir ${title}</h2>
                     <button onclick="document.getElementById('modal-container').innerHTML=''" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 36px; height: 36px; border-radius: 50%; cursor: pointer;">&times;</button>
                 </header>
                 <div style="display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; padding-right: 5px;">
-                    ${profiles.map(p => `
-                        <div class="profile-item" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); cursor: pointer; transition: 0.2s;" onclick='(${onSelect.toString()})(${JSON.stringify(p)}); document.getElementById("modal-container").innerHTML="";'>
+                    ${profiles.map((p, idx) => `
+                        <div class="profile-item" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); cursor: pointer; transition: 0.2s;" 
+                             onclick='window._tempPickerCallback(${JSON.stringify(p).replace(/'/g, "&apos;")}); document.getElementById("modal-container").innerHTML="";'>
                             ${p.avatar ? `<img src="${p.avatar}" style="width: 40px; height: 40px; border-radius: 50%;">` : `<div class="avatar avatar-sm avatar-placeholder">${p.name[0]}</div>`}
                             <div>
                                 <p style="margin: 0; font-weight: 700; font-size: 0.9rem;">${p.name}</p>
