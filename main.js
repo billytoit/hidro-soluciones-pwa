@@ -1881,6 +1881,7 @@ window.HS_adminRemovePhoto = async (projectId, updateId, photoUrl) => {
 };
 
 async function HS_syncState() {
+    if (!window.hSupabase) return;
     const { data: { session } } = await window.hSupabase.auth.getSession();
     if (!session) {
         // If we have a dummy demo user, don't revert to auth
@@ -1939,8 +1940,9 @@ async function initApp() {
     }
 
     if (!window.hSupabase) {
-        document.getElementById('debug-errors').style.display = 'block';
-        document.getElementById('error-msg').innerText = "FATAL: La librería de Supabase no cargó (revisa tu internet o firewall).";
+        console.warn('initApp: Supabase no disponible o modo DEMO activado.');
+        if (state.view === 'loading') state.view = 'auth';
+        render();
         return;
     }
 
@@ -1951,11 +1953,13 @@ async function initApp() {
 }
 
 // Listen for auth changes
-window.hSupabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        initApp();
-    }
-});
+if (window.hSupabase) {
+    window.hSupabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+            initApp();
+        }
+    });
+}
 
 window.HS_openManageMaestrosModal = async () => {
     const maestros = await window.hDataService.getMaestros();
