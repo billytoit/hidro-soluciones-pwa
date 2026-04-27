@@ -60,7 +60,7 @@ class DataService {
             const project = mapped.find(p => p.id === du.project_id);
             if (project) {
                 // Ensure demo updates have a status
-                if(!du.status) du.status = 'pending';
+                if(!du.status) du.status = 'pending_supervisor';
                 project.updates.push(du);
             }
         });
@@ -361,6 +361,7 @@ class DataService {
                     date: new Date().toISOString().split('T')[0],
                     description: updateData.description,
                     comment: updateData.comment || '',
+                    status: 'pending_supervisor', // Nuevo estado inicial
                     responsible: updateData.responsible_name || window.state.currentUser.name,
                     photos: updateData.photos || []
                 });
@@ -574,11 +575,11 @@ class DataService {
         return true;
     }
 
-    async validateProjectUpdate(updateId, userId, isApproved) {
+    async validateProjectUpdate(updateId, userId, newStatus) {
         // Handle Demo updates
         const demoUpdate = this.demoUpdates.find(u => u.id === updateId);
         if (demoUpdate) {
-            demoUpdate.status = isApproved ? 'validated' : 'rejected';
+            demoUpdate.status = newStatus;
             demoUpdate.validated_by = userId;
             return true;
         }
@@ -587,7 +588,7 @@ class DataService {
         const { error } = await window.hSupabase
             .from('project_updates')
             .update({
-                status: isApproved ? 'validated' : 'rejected',
+                status: newStatus,
                 validated_by: userId,
                 validated_at: new Date().toISOString()
             })

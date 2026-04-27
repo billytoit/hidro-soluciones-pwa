@@ -82,7 +82,7 @@ function renderAuth() {
             progress: 65,
             status: 'executing',
             updates: [
-                { id: 'u1', date: '2026-02-10', description: 'Instalación de tuberías principales terminada.', status: 'validated', photos: [] }
+                { id: 'u1', date: '2026-02-10', description: 'Instalación de tuberías principales terminada.', status: 'approved', photos: [] }
             ]
         };
         state.currentUser = { id: '00000000-0000-0000-0000-000000000002', name: 'Cliente Demo' };
@@ -151,10 +151,10 @@ async function renderClientDashboard() {
 
     // Fetch full timeline (Updates + Payments + Audit Logs)
     let timeline = await window.hDataService.getProjectTimeline(p.id);
-    if (state.currentRole === 'client') {
+    if (state.currentRole === 'client' || state.currentRole === 'cliente') {
         timeline = timeline.filter(item => {
             if (item.type === 'UPDATE') {
-                return item.data.status === 'validated';
+                return item.data.status === 'approved' || item.data.status === 'validated';
             }
             return true;
         });
@@ -206,6 +206,27 @@ async function renderClientDashboard() {
         alert('Pedido ' + (status === 'approved' ? 'Aprobado' : 'Rechazado') + ' correctamente.');
         document.getElementById('modal-container').innerHTML = '';
         render(); // re-render to update badges
+    };
+
+    window.HS_addClientComment = async (updateId) => {
+        const text = prompt('Escribe tu comentario sobre este avance:');
+        if (!text) return;
+        
+        // Save to demoUpdates if exists
+        const demoUpdate = window.hDataService.demoUpdates.find(u => u.id === updateId);
+        if (demoUpdate) {
+            demoUpdate.client_comment = text;
+        } else {
+            const p = state.currentProject;
+            if(p) {
+                const u = p.updates.find(x => x.id === updateId);
+                if(u) u.client_comment = text;
+            }
+        }
+        
+        await window.hDataService.logActivity('project_updates', updateId, 'CLIENT_COMMENT', state.currentUser.id, 'El cliente dejó un comentario', null, { comment: text });
+        alert('Comentario guardado. La empresa ha sido notificada.');
+        render();
     };
 
     appContainer.innerHTML = `
@@ -340,6 +361,17 @@ async function renderClientDashboard() {
                                 <div class="media-gallery" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px;">
                                     ${u.photos && u.photos.slice ? u.photos.slice(0, 4).map(src => `<div style="aspect-ratio: 1/1;"><img src="${src}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);"></div>`).join('') : ''}
                                 </div>
+                                
+                                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05);" onclick="event.stopPropagation()">
+                                    ${u.client_comment ? `
+                                        <div style="background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                            <p style="font-size: 0.7rem; color: #10b981; font-weight: 800; margin: 0 0 4px;">TU COMENTARIO:</p>
+                                            <p style="font-size: 0.8rem; color: white; margin: 0; font-style: italic;">"${u.client_comment}"</p>
+                                        </div>
+                                    ` : `
+                                        <button onclick="window.HS_addClientComment('${u.id}')" style="background: transparent; color: var(--text-dim); border: 1px dashed rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; width: 100%; cursor: pointer; text-align: left;">+ Añadir un comentario u observación...</button>
+                                    `}
+                                </div>
     
                                 <div style="margin-top: 16px; font-size: 0.75rem; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;">
                                     VER DETALLES &rarr;
@@ -417,7 +449,13 @@ async function renderMaestroDashboard() {
     const maestro = state.currentUser;
     if (!maestro) return renderSkeletonDashboard();
 
-    const projects = await window.hDataService.getProjectsByMaestro(maestro.id);
+    const isSupervisor = state.currentRole === 'supervisor';
+    const allProjects = await window.hDataService.getProjects();
+    const projects = isSupervisor ? allProjects : allProjects.filter(p => p.assignedMaestroId === maestro.id);
+    
+    // Recopilar pendientes para Supervisor
+    const pendingUpdatesSup = isSupervisor ? projects.flatMap(p => p.updates.filter(u => u.status === 'pending_supervisor').map(u => ({...u, projectName: p.name, projectId: p.id}))) : [];
+    const rejectedUpdatesRes = !isSupervisor ? projects.flatMap(p => p.updates.filter(u => u.status === 'rejected_supervisor').map(u => ({...u, projectName: p.name, projectId: p.id}))) : [];
 
     window.HS_openMaterialOrderModal = (projectId) => {
         if (!projectId) return alert('No hay obra seleccionada.');
@@ -433,10 +471,25 @@ async function renderMaestroDashboard() {
                         <button onclick="document.getElementById('modal-container').innerHTML=''" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">&times;</button>
                     </header>
                     <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
-                        <input type="text" id="mo-item" placeholder="Ej: Tubo PVC 4 pulgadas" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white;">
+                        <select id="mo-item" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none; margin-bottom: 12px;">
+                            <option value="" disabled selected style="color: black;">Seleccionar material del catálogo...</option>
+                            <option value="Tubo PVC 4 pulgadas" style="color: black;">Tubo PVC 4 pulgadas</option>
+                            <option value="Tubo PVC 2 pulgadas" style="color: black;">Tubo PVC 2 pulgadas</option>
+                            <option value="Cemento Sol (Saco)" style="color: black;">Cemento Sol (Saco)</option>
+                            <option value="Arena Gruesa (m3)" style="color: black;">Arena Gruesa (m3)</option>
+                            <option value="Ladrillo King Kong" style="color: black;">Ladrillo King Kong</option>
+                            <option value="Fierro Corrugado 1/2" style="color: black;">Fierro Corrugado 1/2"</option>
+                            <option value="Pegamento PVC" style="color: black;">Pegamento PVC (Galón)</option>
+                        </select>
                         <div style="display: flex; gap: 12px;">
                             <input type="number" id="mo-qty" placeholder="Cantidad" style="flex: 1; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white;">
-                            <input type="text" id="mo-unit" placeholder="Unidad (Ej: m, unid)" style="flex: 1; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white;">
+                            <select id="mo-unit" style="flex: 1; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none;">
+                                <option value="Unidades" style="color: black;">Unidades</option>
+                                <option value="Metros" style="color: black;">Metros</option>
+                                <option value="Sacos" style="color: black;">Sacos</option>
+                                <option value="m3" style="color: black;">m3</option>
+                                <option value="Galones" style="color: black;">Galones</option>
+                            </select>
                         </div>
                     </div>
                     <button class="btn-primary" onclick="window.HS_submitMaterialOrder('${projectId}')" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">ENVIAR A APROBACIÓN</button>
@@ -460,10 +513,21 @@ async function renderMaestroDashboard() {
         
         const ok = await window.hDataService.createMaterialOrder(orderData);
         if (ok) {
-            alert('Pedido de materiales enviado al cliente para aprobación.');
+            alert('Pedido de materiales enviado para revisión.');
             document.getElementById('modal-container').innerHTML = '';
         } else {
             alert('Error al enviar pedido.');
+        }
+    };
+
+    window.HS_supervisorAction = async (projectId, updateId, action) => {
+        const newStatus = action === 'approve' ? 'pending_jefatura' : 'rejected_supervisor';
+        const ok = await window.hDataService.validateProjectUpdate(updateId, state.currentUser.id, newStatus);
+        if (ok) {
+            alert(action === 'approve' ? 'Visto Bueno otorgado.' : 'Devuelto al residente para corrección.');
+            render();
+        } else {
+            alert('Error procesando la acción.');
         }
     };
 
@@ -485,8 +549,64 @@ async function renderMaestroDashboard() {
                 </div>
 
                 <h1 style="font-size: 1.8rem; margin: 0; font-weight: 800;">${maestro.name}</h1>
-                <p class="text-dim" style="font-weight: 600; font-size: 0.9rem; margin-top: 8px;">Maestro de Obra Senior</p>
+                <p class="text-dim" style="font-weight: 600; font-size: 0.9rem; margin-top: 8px;">${isSupervisor ? 'Supervisor de Obra' : 'Maestro de Obra Senior'}</p>
             </header>
+
+            ${isSupervisor ? `
+                <div style="margin-bottom: 32px;">
+                    <h2 style="font-size: 1rem; margin-bottom: 16px; color: var(--text-main); font-weight: 800;">Bandeja de Entrada (Supervisor)</h2>
+                    <div style="display: flex; gap: 12px; margin-bottom: 24px; overflow-x: auto; padding-bottom: 8px;">
+                        <div style="flex: 0 0 auto; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px 16px; border-radius: 12px; color: var(--primary);">
+                            <span style="font-size: 1.2rem; font-weight: 800;">${pendingUpdatesSup.length}</span><br>
+                            <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">Avances</span>
+                        </div>
+                        <div style="flex: 0 0 auto; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 12px 16px; border-radius: 12px; color: #10b981;">
+                            <span style="font-size: 1.2rem; font-weight: 800;">0</span><br>
+                            <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">Materiales</span>
+                        </div>
+                        <div style="flex: 0 0 auto; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); padding: 12px 16px; border-radius: 12px; color: #f59e0b;">
+                            <span style="font-size: 1.2rem; font-weight: 800;">0</span><br>
+                            <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">Facturas</span>
+                        </div>
+                    </div>
+
+                    ${pendingUpdatesSup.length ? pendingUpdatesSup.map(u => `
+                        <div class="glass-card" style="padding: 16px; margin-bottom: 16px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                                <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center;">
+                                    <img src="${u.photos[0] || ''}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
+                                </div>
+                                <div>
+                                    <h3 style="margin: 0; font-size: 0.9rem; font-weight: 800;">${u.projectName}</h3>
+                                    <p style="margin: 0; font-size: 0.7rem; color: var(--text-dim);">Por: ${u.responsible}</p>
+                                </div>
+                            </div>
+                            <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 16px;">${u.description}</p>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn-primary" onclick="window.HS_supervisorAction('${u.projectId}', '${u.id}', 'approve')" style="flex: 1; padding: 10px; font-size: 0.75rem; background: var(--primary);">VISTO BUENO</button>
+                                <button class="btn-primary" onclick="window.HS_supervisorAction('${u.projectId}', '${u.id}', 'reject')" style="flex: 1; padding: 10px; font-size: 0.75rem; background: transparent; border: 1px solid #ef4444; color: #ef4444; box-shadow: none;">DEVOLVER</button>
+                            </div>
+                        </div>
+                    `).join('') : '<p class="text-dim" style="font-size: 0.8rem;">Todo al día. No hay avances por revisar.</p>'}
+                </div>
+            ` : ''}
+
+            ${!isSupervisor && rejectedUpdatesRes.length > 0 ? `
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 16px; border-radius: 16px; margin-bottom: 24px;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <div style="background: #ef4444; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800;">!</div>
+                        <h3 style="margin: 0; font-size: 0.9rem; color: white;">Avances Devueltos (${rejectedUpdatesRes.length})</h3>
+                    </div>
+                    <p style="font-size: 0.75rem; color: #fca5a5; margin-bottom: 12px;">El supervisor encontró problemas. Revisa y corrige:</p>
+                    ${rejectedUpdatesRes.map(u => `
+                        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+                            <p style="margin: 0 0 4px; font-size: 0.8rem; font-weight: 800; color: white;">${u.projectName}</p>
+                            <p style="margin: 0; font-size: 0.75rem; color: var(--text-dim);">${u.description.substring(0,50)}...</p>
+                            <button onclick="window.HS_openMaestroProjectDetail('${u.projectId}')" style="margin-top: 8px; background: transparent; color: #ef4444; border: 1px solid #ef4444; border-radius: 6px; padding: 4px 12px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">CORREGIR</button>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
 
 
 
@@ -704,19 +824,67 @@ async function renderAdminDashboard() {
     const projects = await window.hDataService.getProjects();
     const maestros = await window.hDataService.getMaestros();
 
-    window.HS_processUpdateValidation = async (updateId, isApproved) => {
+    window.HS_processUpdateValidation = async (updateId, newStatus) => {
         const userId = state.currentUser?.id || '00000000-0000-0000-0000-000000000004';
-        const ok = await window.hDataService.validateProjectUpdate(updateId, userId, isApproved);
+        const ok = await window.hDataService.validateProjectUpdate(updateId, userId, newStatus);
         if (ok) {
-            alert('Reporte ' + (isApproved ? 'aprobado' : 'rechazado') + ' con éxito.');
+            alert('Estado actualizado a: ' + newStatus);
             render();
         } else {
             alert('Error al procesar la validación.');
         }
     };
 
+    // Función para editar el reporte desde jefatura
+    window.HS_editUpdateText = async (projectId, updateId) => {
+        const descEl = document.getElementById('admin-upd-desc-' + updateId);
+        const newText = prompt('Edita la descripción del reporte para el cliente:', descEl.innerText);
+        if (newText !== null) {
+            await window.hDataService.updateProject(projectId, {}, state.currentUser.id); // Triggers audit if we pass updates. We'll just save the text for now.
+            // Simplified for demo: save update text and log manually
+            await window.HS_saveUpdateText(projectId, updateId, newText);
+            await window.hDataService.logActivity('project_updates', updateId, 'UPDATE', state.currentUser.id, 'Edición de descripción de avance', null, { description: newText });
+            descEl.innerText = newText;
+        }
+    };
+
     // Simple state for admin tabs
     if (!state.adminTab) state.adminTab = 'validation';
+
+    const allUpdates = projects.flatMap(p => p.updates.map(u => ({ ...u, projectName: p.name, projectId: p.id })));
+    const pendingSuper = allUpdates.filter(u => u.status === 'pending_supervisor' || u.status === 'pending');
+    const pendingJefe = allUpdates.filter(u => u.status === 'pending_jefatura');
+    const approved = allUpdates.filter(u => u.status === 'approved' || u.status === 'validated');
+
+    const renderKanbanCard = (u) => `
+        <div class="glass-card" style="padding: 16px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 12px; cursor: default;">
+            <div style="height: 120px; border-radius: 12px; overflow: hidden; margin-bottom: 12px;">
+                <img src="${u.photos[0] || 'https://images.unsplash.com/photo-1541888941259-7b9f9227fe95?q=80&w=600&auto=format&fit=crop'}" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            <p style="font-size: 0.65rem; font-weight: 800; color: var(--primary); text-transform: uppercase;">${u.projectName}</p>
+            <p id="admin-upd-desc-${u.id}" style="font-size: 0.8rem; color: var(--text-main); margin: 8px 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${u.description}</p>
+            ${u.client_comment ? `
+            <div style="background: rgba(16, 185, 129, 0.1); padding: 8px; border-radius: 8px; margin-top: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                <p style="font-size: 0.65rem; color: #10b981; font-weight: 800; margin: 0 0 2px;">COMENTARIO CLIENTE:</p>
+                <p style="font-size: 0.75rem; color: white; margin: 0; font-style: italic;">"${u.client_comment}"</p>
+            </div>
+            ` : ''}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                <span style="font-size: 0.7rem; color: var(--text-dim);">${u.responsible || 'M'}</span>
+                <button onclick="window.HS_editUpdateText('${u.projectId}', '${u.id}')" style="background: transparent; border: 1px solid var(--border); color: var(--text-dim); padding: 4px 8px; border-radius: 6px; font-size: 0.65rem; cursor: pointer;">EDITAR</button>
+            </div>
+            
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+                ${u.status === 'pending_supervisor' || u.status === 'pending' ? `
+                    <button class="btn-primary" onclick="window.HS_processUpdateValidation('${u.id}', 'pending_jefatura')" style="flex: 1; padding: 8px; font-size: 0.7rem;">V.B. SUPERVISOR</button>
+                ` : ''}
+                ${u.status === 'pending_jefatura' ? `
+                    <button class="btn-primary" onclick="window.HS_processUpdateValidation('${u.id}', 'approved')" style="flex: 1; padding: 8px; font-size: 0.7rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">APROBAR</button>
+                    <button class="btn-primary" onclick="window.HS_processUpdateValidation('${u.id}', 'rejected')" style="flex: 1; background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 8px; font-size: 0.7rem; box-shadow: none;">RECHAZAR</button>
+                ` : ''}
+            </div>
+        </div>
+    `;
 
     appContainer.innerHTML = `
         <div class="container fade-in" style="padding-bottom: 120px;">
@@ -732,8 +900,8 @@ async function renderAdminDashboard() {
                     </div>
                 </div>
                 <div style="display: flex; gap: 12px;">
-                    <div style="background: rgba(255,255,255,0.05); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-dim);">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <div style="background: rgba(255,255,255,0.05); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-dim);" onclick="window.HS_openAuditLogs()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                     </div>
                     <button id="btn-logout" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
@@ -743,36 +911,35 @@ async function renderAdminDashboard() {
 
             <div class="tab-bar">
                 <div class="tab-item ${state.adminTab === 'projects' ? 'active' : ''}" onclick="state.adminTab='projects'; render();">Obras</div>
-                <div class="tab-item ${state.adminTab === 'validation' ? 'active' : ''}" onclick="state.adminTab='validation'; render();">Validación</div>
+                <div class="tab-item ${state.adminTab === 'validation' ? 'active' : ''}" onclick="state.adminTab='validation'; render();">Aprobaciones</div>
                 <div class="tab-item ${state.adminTab === 'materiales' ? 'active' : ''}" onclick="state.adminTab='materiales'; render();">Materiales</div>
                 <div class="tab-item ${state.adminTab === 'equipo' ? 'active' : ''}" onclick="state.adminTab='equipo'; render();">Equipo</div>
             </div>
 
             ${state.adminTab === 'validation' ? `
                 <div style="margin-bottom: 24px;">
-                    <h2 style="font-size: 1.1rem; margin-bottom: 8px;">Validación de Reportes</h2>
-                    <p class="text-dim">${projects.flatMap(p => p.updates.filter(u => u.status === 'pending')).length} reportes pendientes de revisión técnica</p>
+                    <h2 style="font-size: 1.1rem; margin-bottom: 8px;">Kanban de Aprobaciones</h2>
+                    <p class="text-dim">Revisa y aprueba el flujo operativo de los residentes.</p>
                 </div>
 
-                <div style="display: flex; flex-direction: column; gap: 24px;">
-                    ${projects.flatMap(p => p.updates.filter(u => u.status === 'pending').map(u => ({ ...u, projectName: p.name, projectId: p.id }))).map(u => `
-                        <div class="glass-card" style="padding: 0; border: none;">
-                            <img src="${u.photos[0] || 'https://images.unsplash.com/photo-1541888941259-7b9f9227fe95?q=80&w=600&auto=format&fit=crop'}" style="width: 100%; height: 200px; object-fit: cover;">
-                            <div style="padding: 24px;">
-                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                                    <div class="avatar avatar-placeholder" style="width: 24px; height: 24px; font-size: 0.6rem;">${(u.responsible || 'M')[0]}</div>
-                                    <p style="font-size: 0.7rem; font-weight: 800; color: var(--text-dim); text-transform: uppercase;">REPORTE #${u.id.substring(0, 4).toUpperCase()} — ${u.projectName}</p>
-                                </div>
-                                <h3 style="margin: 0 0 12px; font-size: 1.1rem; font-weight: 800;">Avance de Obra</h3>
-                                <p style="font-size: 0.9rem; color: var(--text-dim); margin-bottom: 24px;">${u.description}</p>
-                                
-                                <div style="display: flex; gap: 12px;">
-                                    <button class="btn-primary" onclick="window.HS_processUpdateValidation('${u.id}', true)" style="flex: 1; padding: 10px; font-size: 0.8rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">APROBAR</button>
-                                    <button class="btn-primary" onclick="window.HS_processUpdateValidation('${u.id}', false)" style="flex: 1; background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 10px; font-size: 0.8rem; box-shadow: none;">RECHAZAR</button>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('') || '<p class="text-dim">No hay reportes pendientes de validación.</p>'}
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; align-items: start;">
+                    <!-- Columna 1 -->
+                    <div style="background: rgba(255,255,255,0.02); border-radius: 20px; padding: 16px; border: 1px dashed rgba(255,255,255,0.1);">
+                        <h3 style="font-size: 0.8rem; margin: 0 0 16px; color: var(--text-dim); font-weight: 800; text-transform: uppercase;">Pendiente Sup. (${pendingSuper.length})</h3>
+                        ${pendingSuper.map(renderKanbanCard).join('') || '<p class="text-dim" style="font-size: 0.8rem;">No hay reportes.</p>'}
+                    </div>
+
+                    <!-- Columna 2 -->
+                    <div style="background: rgba(59, 130, 246, 0.05); border-radius: 20px; padding: 16px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                        <h3 style="font-size: 0.8rem; margin: 0 0 16px; color: var(--primary); font-weight: 800; text-transform: uppercase;">Pendiente Jefatura (${pendingJefe.length})</h3>
+                        ${pendingJefe.map(renderKanbanCard).join('') || '<p class="text-dim" style="font-size: 0.8rem;">No hay reportes.</p>'}
+                    </div>
+
+                    <!-- Columna 3 -->
+                    <div style="background: rgba(16, 185, 129, 0.05); border-radius: 20px; padding: 16px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                        <h3 style="font-size: 0.8rem; margin: 0 0 16px; color: #10b981; font-weight: 800; text-transform: uppercase;">Aprobados (Recientes)</h3>
+                        ${approved.slice(0, 5).map(renderKanbanCard).join('') || '<p class="text-dim" style="font-size: 0.8rem;">No hay reportes.</p>'}
+                    </div>
                 </div>
             ` : state.adminTab === 'projects' ? `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -1067,10 +1234,10 @@ window.HS_openReportModal = (projectId) => {
                     <textarea id="val-desc" style="width: 100%; height: 160px; padding: 20px; border-radius: 24px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); color: white; line-height: 1.5; font-size: 1rem;" placeholder="El dictado aparecerá aquí..."></textarea>
                     
                     <div style="position: absolute; bottom: 85px; right: 0; left: 0; display: flex; flex-direction: column; align-items: center; pointer-events: none;">
-                        <div style="width: 56px; height: 56px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 30px rgba(59, 130, 246, 0.5); pointer-events: auto; cursor: pointer;">
+                        <div id="btn-dictate-report" style="width: 56px; height: 56px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 30px rgba(59, 130, 246, 0.5); pointer-events: auto; cursor: pointer; transition: all 0.3s ease;">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
                         </div>
-                        <p style="margin-top: 12px; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase;">Dictar por Voz</p>
+                        <p id="lbl-dictate-report" style="margin-top: 12px; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase;">Dictar por Voz</p>
                     </div>
                 </div>
 
@@ -1109,6 +1276,79 @@ window.HS_openReportModal = (projectId) => {
             alert('Error al subir la imagen.');
         }
     };
+
+    // --- DICTADO POR VOZ ---
+    const btnDictate = document.getElementById('btn-dictate-report');
+    const lblDictate = document.getElementById('lbl-dictate-report');
+    const txtDesc = document.getElementById('val-desc');
+    let isRecording = false;
+    let recognition = null;
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'es-ES';
+
+        recognition.onstart = function() {
+            isRecording = true;
+            btnDictate.style.background = '#ef4444';
+            btnDictate.style.boxShadow = '0 0 30px rgba(239, 68, 68, 0.8)';
+            lblDictate.innerText = 'Escuchando... (Toca para detener)';
+            lblDictate.style.color = '#ef4444';
+        };
+
+        recognition.onresult = function(event) {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+
+            if (finalTranscript) {
+                txtDesc.value = (txtDesc.value + ' ' + finalTranscript).trim() + ' ';
+            }
+        };
+
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error', event.error);
+            stopRecording();
+        };
+
+        recognition.onend = function() {
+            if (isRecording) {
+                // Si se detiene inesperadamente, intentamos reiniciar si sigue en modo grabación
+                // recognition.start(); // Puede causar loop si hay errores constantes
+                stopRecording();
+            }
+        };
+
+        btnDictate.onclick = () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                txtDesc.placeholder = 'Habla ahora...';
+                recognition.start();
+            }
+        };
+    } else {
+        btnDictate.onclick = () => alert('Tu navegador no soporta dictado por voz.');
+    }
+
+    function stopRecording() {
+        isRecording = false;
+        if(recognition) recognition.stop();
+        btnDictate.style.background = 'var(--primary)';
+        btnDictate.style.boxShadow = '0 0 30px rgba(59, 130, 246, 0.5)';
+        lblDictate.innerText = 'Dictar por Voz';
+        lblDictate.style.color = 'var(--primary)';
+    }
 
     document.getElementById('btn-save-report').onclick = async () => {
         const desc = document.getElementById('val-desc').value;
@@ -1413,6 +1653,84 @@ window.HS_validateUpdate = async (projectId, updateId) => {
                 <h2 style="margin: 0 0 12px; font-weight: 800; font-size: 1.5rem;">Reporte Validado</h2>
                 <p class="text-dim" style="font-size: 0.9rem; margin-bottom: 32px; line-height: 1.6;">El reporte ha sido validado y el cliente ha recibido una notificación en tiempo real.</p>
                 <button class="btn-primary" style="background: #10b981; color: white; width: 100%;" onclick="document.getElementById('modal-container').innerHTML=''; render();">ENTENDIDO</button>
+            </div>
+        </div>
+    `;
+};
+
+window.HS_openAuditLogs = async () => {
+    // Para la demo, generamos un log consolidado usando getProjectTimeline del primer proyecto o datos mock
+    let timeline = [];
+    if (state.currentProject) {
+        timeline = await window.hDataService.getProjectTimeline(state.currentProject.id);
+        timeline = timeline.filter(t => t.type === 'AUDIT' || t.type === 'UPDATE');
+    } else {
+        const projects = await window.hDataService.getProjects();
+        if (projects.length > 0) {
+            timeline = await window.hDataService.getProjectTimeline(projects[0].id);
+            timeline = timeline.filter(t => t.type === 'AUDIT' || t.type === 'UPDATE');
+        }
+    }
+
+    if (timeline.length === 0) {
+        timeline = [
+            { type: 'AUDIT', date: new Date(), data: { action: 'UPDATE', details: 'Edición de descripción de avance', actor: { full_name: 'Jefe de Residentes Demo' }, created_at: new Date() } },
+            { type: 'AUDIT', date: new Date(Date.now() - 3600000), data: { action: 'CREATE', details: 'Nuevo reporte de avance creado', actor: { full_name: 'Residente Demo' }, created_at: new Date(Date.now() - 3600000) } }
+        ];
+    }
+
+    const modal = document.getElementById('modal-container');
+    modal.innerHTML = `
+        <div class="fade-in" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(20px); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+            <div class="glass-card" style="width: 100%; max-width: 500px; padding: 32px; border-radius: 32px; max-height: 90vh; overflow-y: auto;">
+                <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800;">Registro de Auditoría</h2>
+                        <p class="text-dim" style="font-size: 0.8rem; text-transform: uppercase;">Historial Inmutable</p>
+                    </div>
+                    <button onclick="document.getElementById('modal-container').innerHTML=''" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 44px; height: 44px; border-radius: 50%; cursor: pointer;">&times;</button>
+                </header>
+
+                <div style="display: flex; flex-direction: column; gap: 16px; position: relative;">
+                    <div style="position: absolute; top: 0; bottom: 0; left: 11px; width: 2px; background: rgba(255,255,255,0.05);"></div>
+                    ${timeline.map(item => {
+                        let icon = '<circle cx="12" cy="12" r="10"/>';
+                        let actor = 'Sistema';
+                        let detail = '';
+                        let time = '';
+                        
+                        if (item.type === 'AUDIT') {
+                            const audit = item.data;
+                            if (audit.action === 'UPDATE') icon = '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>';
+                            if (audit.action === 'CLIENT_COMMENT') icon = '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>';
+                            actor = audit.actor?.full_name || 'Sistema';
+                            detail = audit.details || 'Actividad registrada';
+                            if (audit.action === 'CLIENT_COMMENT' && audit.payload?.comment) {
+                                detail += ` - "${audit.payload.comment}"`;
+                            }
+                            time = new Date(audit.created_at).toLocaleString();
+                        } else if (item.type === 'UPDATE') {
+                            const u = item.data;
+                            icon = '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>';
+                            actor = u.responsible;
+                            detail = 'Creó un avance: ' + (u.description.substring(0, 30) + '...');
+                            time = new Date(u.date).toLocaleString();
+                        }
+
+                        return `
+                        <div style="position: relative; padding-left: 36px;">
+                            <div style="position: absolute; left: 0; top: 2px; width: 24px; height: 24px; background: var(--background); border: 2px solid var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 1;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2">${icon}</svg>
+                            </div>
+                            <div class="glass-card" style="padding: 12px; border: 1px solid rgba(255,255,255,0.02); background: rgba(255,255,255,0.02);">
+                                <p style="margin: 0; font-size: 0.8rem; font-weight: 800; color: var(--text-main);">${actor}</p>
+                                <p style="margin: 4px 0; font-size: 0.75rem; color: var(--text-dim);">${detail}</p>
+                                <p style="margin: 0; font-size: 0.6rem; color: var(--text-dim); opacity: 0.5;">${time}</p>
+                            </div>
+                        </div>
+                        `;
+                    }).join('')}
+                </div>
             </div>
         </div>
     `;
