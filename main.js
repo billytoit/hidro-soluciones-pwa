@@ -208,6 +208,34 @@ async function renderClientDashboard() {
         render(); // re-render to update badges
     };
 
+    window.HS_openPendingTasks = () => {
+        const modal = document.getElementById('modal-container');
+        modal.innerHTML = `
+            <div class="fade-in" style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(20px); z-index: 1000; display: flex; align-items: flex-end; justify-content: center;">
+                <div class="glass-card" style="width: 100%; max-width: 500px; border-radius: 40px 40px 0 0; padding: 40px 24px; border: 1px solid rgba(255,255,255,0.1); background: #0f172a;">
+                    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+                        <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800;">Tareas Pendientes</h2>
+                        <button onclick="document.getElementById('modal-container').innerHTML=''" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">&times;</button>
+                    </header>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--text-dim); flex-shrink: 0;"></div>
+                            <p style="margin: 0; font-size: 0.9rem; color: white;">Instalación de tuberías secundarias</p>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--text-dim); flex-shrink: 0;"></div>
+                            <p style="margin: 0; font-size: 0.9rem; color: white;">Pruebas de presión (Sector A)</p>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--text-dim); flex-shrink: 0;"></div>
+                            <p style="margin: 0; font-size: 0.9rem; color: white;">Firma de conformidad de etapa</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
     window.HS_addClientComment = async (updateId) => {
         const text = prompt('Escribe tu comentario sobre este avance:');
         if (!text) return;
@@ -268,7 +296,7 @@ async function renderClientDashboard() {
                         <span style="font-size: 1.5rem; font-weight: 800; color: white;">12</span>
                         <p style="margin: 0; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">Días Restantes</p>
                     </div>
-                    <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); cursor: pointer;" onclick="window.HS_openPendingTasks()">
                          <div style="color: #f59e0b; margin-bottom: 8px;">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                         </div>
