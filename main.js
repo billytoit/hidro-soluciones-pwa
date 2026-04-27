@@ -139,20 +139,9 @@ function renderAuth() {
 async function renderClientDashboard() {
     if (!state.currentProject) {
         const allProjects = await window.hDataService.getProjects();
-        let clientProjects = allProjects.filter(p => p.clientName === state.currentUser.name);
+        const clientProjects = allProjects.filter(p => p.clientName === state.currentUser.name);
         
-        // Mocking for Demo
-        if (state.currentUser.name === 'Cliente Demo') {
-            const baseProject = allProjects[0] || { updates: [], clientName: 'Cliente Demo' };
-            clientProjects = [
-                { ...baseProject, id: 'proj-1', name: 'Urbanización Los Senderos', progress: 65, status: 'executing' },
-                { ...baseProject, id: 'proj-2', name: 'Torre Empresarial Z', progress: 20, status: 'delayed' },
-                { ...baseProject, id: 'proj-3', name: 'Plaza del Sol (Etapa 1)', progress: 100, status: 'completed' }
-            ];
-            state.clientHasMultipleProjects = true;
-        } else {
-            state.clientHasMultipleProjects = clientProjects.length > 1;
-        }
+        state.clientHasMultipleProjects = clientProjects.length > 1;
 
         if (clientProjects.length === 1) {
             state.currentProject = clientProjects[0];
@@ -496,7 +485,8 @@ async function renderClientDashboard() {
 
 function renderClientHomeDashboard(projects) {
     const active = projects.filter(p => p.status === 'executing').length;
-    const delayed = projects.filter(p => p.status === 'delayed').length;
+    const delayedProjects = projects.filter(p => p.status === 'delayed');
+    const delayed = delayedProjects.length;
     const completed = projects.filter(p => p.status === 'completed').length;
     const avgProgress = Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length);
 
@@ -527,8 +517,9 @@ function renderClientHomeDashboard(projects) {
                         <p style="margin: 0; font-size: 0.75rem; color: #10b981;">Obras Terminadas</p>
                     </div>
                     ${delayed > 0 ? `
-                    <div style="grid-column: span 2; background: rgba(239, 68, 68, 0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                    <div style="grid-column: span 2; background: rgba(239, 68, 68, 0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.2); cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="window.HS_selectProject('${delayedProjects[0].id}')">
                         <p style="margin: 0; font-size: 0.85rem; color: white; font-weight: 800;"><span style="color: #ef4444;">⚠</span> Tienes ${delayed} obra(s) con observaciones o retrasos.</p>
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #ef4444;">VER &rarr;</span>
                     </div>` : ''}
                 </div>
             </div>
@@ -585,68 +576,6 @@ async function renderMaestroDashboard() {
     const pendingUpdatesSup = isSupervisor ? projects.flatMap(p => p.updates.filter(u => u.status === 'pending_supervisor').map(u => ({...u, projectName: p.name, projectId: p.id}))) : [];
     const rejectedUpdatesRes = !isSupervisor ? projects.flatMap(p => p.updates.filter(u => u.status === 'rejected_supervisor').map(u => ({...u, projectName: p.name, projectId: p.id}))) : [];
 
-    window.HS_openMaterialOrderModal = (projectId) => {
-        if (!projectId) return alert('No hay obra seleccionada.');
-        const modal = document.getElementById('modal-container');
-        modal.innerHTML = `
-            <div class="fade-in" style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(20px); z-index: 1000; display: flex; align-items: flex-end; justify-content: center;">
-                <div class="glass-card" style="width: 100%; max-width: 500px; border-radius: 40px 40px 0 0; padding: 40px 24px; border: 1px solid rgba(255,255,255,0.1); background: #0f172a;">
-                    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-                        <div>
-                            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800;">Pedir Material</h2>
-                            <p class="text-dim" style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #10b981; margin-top: 4px;">• Obra Actual</p>
-                        </div>
-                        <button onclick="document.getElementById('modal-container').innerHTML=''" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">&times;</button>
-                    </header>
-                    <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
-                        <select id="mo-item" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none; margin-bottom: 12px;">
-                            <option value="" disabled selected style="color: black;">Seleccionar material del catálogo...</option>
-                            <option value="Tubo PVC 4 pulgadas" style="color: black;">Tubo PVC 4 pulgadas</option>
-                            <option value="Tubo PVC 2 pulgadas" style="color: black;">Tubo PVC 2 pulgadas</option>
-                            <option value="Cemento Sol (Saco)" style="color: black;">Cemento Sol (Saco)</option>
-                            <option value="Arena Gruesa (m3)" style="color: black;">Arena Gruesa (m3)</option>
-                            <option value="Ladrillo King Kong" style="color: black;">Ladrillo King Kong</option>
-                            <option value="Fierro Corrugado 1/2" style="color: black;">Fierro Corrugado 1/2"</option>
-                            <option value="Pegamento PVC" style="color: black;">Pegamento PVC (Galón)</option>
-                        </select>
-                        <div style="display: flex; gap: 12px;">
-                            <input type="number" id="mo-qty" placeholder="Cantidad" style="flex: 1; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white;">
-                            <select id="mo-unit" style="flex: 1; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none;">
-                                <option value="Unidades" style="color: black;">Unidades</option>
-                                <option value="Metros" style="color: black;">Metros</option>
-                                <option value="Sacos" style="color: black;">Sacos</option>
-                                <option value="m3" style="color: black;">m3</option>
-                                <option value="Galones" style="color: black;">Galones</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button class="btn-primary" onclick="window.HS_submitMaterialOrder('${projectId}')" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">ENVIAR A APROBACIÓN</button>
-                </div>
-            </div>
-        `;
-    };
-
-    window.HS_submitMaterialOrder = async (projectId) => {
-        const item = document.getElementById('mo-item').value;
-        const qty = document.getElementById('mo-qty').value;
-        const unit = document.getElementById('mo-unit').value;
-        
-        if (!item || !qty || !unit) return alert('Completa todos los campos del pedido.');
-        
-        const orderData = {
-            projectId: projectId,
-            userId: state.currentUser.id,
-            items: [{ name: item, quantity: qty, unit: unit }]
-        };
-        
-        const ok = await window.hDataService.createMaterialOrder(orderData);
-        if (ok) {
-            alert('Pedido de materiales enviado para revisión.');
-            document.getElementById('modal-container').innerHTML = '';
-        } else {
-            alert('Error al enviar pedido.');
-        }
-    };
 
     window.HS_supervisorAction = async (projectId, updateId, action) => {
         const newStatus = action === 'approve' ? 'pending_jefatura' : 'rejected_supervisor';
@@ -829,13 +758,13 @@ window.HS_openMaestroProjectDetail = async (projectId) => {
                         </div>
                     </div>
 
-                    <div class="cta-register" onclick="window.HS_openMaterialOrderModal('${p.id}')" style="margin: 0; padding: 24px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); display: flex; align-items: center; gap: 20px;">
+                    <div class="cta-register" onclick="window.HS_openMaterialManagementModal('${p.id}')" style="margin: 0; padding: 24px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); display: flex; align-items: center; gap: 20px;">
                         <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 16px; display: flex; align-items: center; justify-content: center;">
                             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
                         </div>
                         <div style="text-align: left;">
-                            <h3 style="margin: 0 0 4px; font-size: 1.1rem; font-weight: 800;">PEDIR MATERIAL</h3>
-                            <p style="margin: 0; font-size: 0.8rem; color: rgba(255,255,255,0.8);">Solicita insumos al cliente</p>
+                            <h3 style="margin: 0 0 4px; font-size: 1.1rem; font-weight: 800;">GESTIÓN MATERIALES</h3>
+                            <p style="margin: 0; font-size: 0.8rem; color: rgba(255,255,255,0.8);">Ver, pedir y gestionar insumos</p>
                         </div>
                     </div>
 
@@ -1014,8 +943,15 @@ async function renderAdminDashboard() {
         </div>
     `;
 
+    const allMaterialOrders = (await Promise.all(projects.map(p => window.hDataService.getMaterialOrders(p.id))))
+        .flat()
+        .map(o => {
+            const p = projects.find(x => x.id === o.project_id);
+            return { ...o, projectName: p ? p.name : 'Desconocido' };
+        });
+
     appContainer.innerHTML = `
-        <div class="container fade-in" style="padding-bottom: 120px;">
+        <div class="container container-admin fade-in" style="padding-bottom: 120px;">
             <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; padding-top: 10px;">
                 <div style="display: flex; align-items: center; gap: 15px; cursor: pointer;" onclick="window.HS_renderProfile()">
                     <div style="position: relative;">
@@ -1120,9 +1056,28 @@ async function renderAdminDashboard() {
                     <h2 style="font-size: 1.1rem; margin: 0;">Control de Materiales</h2>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 16px;">
-                    <div class="glass-card" style="padding: 24px; text-align: center;">
-                        <p class="text-dim">Módulo de inventario y pedidos globales en construcción.</p>
-                    </div>
+                    ${allMaterialOrders.length ? allMaterialOrders.map(o => `
+                        <div class="glass-card" style="padding: 20px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); cursor: default;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <div>
+                                    <span style="font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase;">OBRA: ${o.projectName}</span>
+                                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: white; font-weight: 700;">Pedido por: ${o.creator?.full_name || 'Desconocido'}</p>
+                                </div>
+                                <div style="background: ${o.status === 'pending' ? '#f59e0b20' : o.status === 'approved' ? '#10b98120' : '#ef444420'}; color: ${o.status === 'pending' ? '#f59e0b' : o.status === 'approved' ? '#10b981' : '#ef4444'}; padding: 4px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 800; border: 1px solid ${o.status === 'pending' ? '#f59e0b40' : o.status === 'approved' ? '#10b98140' : '#ef444440'};">
+                                    ${o.status === 'pending' ? 'PENDIENTE' : o.status === 'approved' ? 'APROBADO' : 'RECHAZADO'}
+                                </div>
+                            </div>
+                            
+                            <ul style="margin: 0 0 16px; padding-left: 20px; color: var(--text-main); font-size: 0.85rem;">
+                                ${(o.items_json || []).map(item => `<li>${item.quantity} ${item.unit} de ${item.name}</li>`).join('')}
+                            </ul>
+                            
+                            <div style="display: flex; gap: 8px;">
+                                <button style="flex: 1; background: transparent; border: 1px solid var(--border); color: var(--text-main); padding: 8px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="window.HS_editMaterialOrder('${o.id}', '${o.project_id}')">EDITAR CANTIDAD</button>
+                                <button style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 8px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="window.HS_deleteMaterialOrder('${o.id}', '${o.project_id}')">ELIMINAR</button>
+                            </div>
+                        </div>
+                    `).join('') : '<p class="text-dim" style="font-size: 0.8rem; text-align: center;">No hay pedidos de material registrados.</p>'}
                 </div>
             ` : `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -1130,18 +1085,20 @@ async function renderAdminDashboard() {
                     <button class="btn-primary" style="width: auto; padding: 10px 16px; font-size: 0.75rem;" onclick="window.HS_openNewWorkerModal()">+ NUEVO</button>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    ${maestros.map(m => `
+                    ${maestros.map(m => {
+                        const assignedProjects = projects.filter(p => p.assignedMaestroId === m.id);
+                        return `
                         <div class="glass-card" onclick="window.HS_openWorkerDetail('${m.id}')" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; cursor: pointer;">
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 ${m.avatar ? `<img src="${m.avatar}" class="avatar" alt="Maestro">` : `<div class="avatar avatar-placeholder">${m.name[0]}</div>`}
                                 <div>
                                     <p style="margin: 0; font-weight: 700; color: var(--text-main);">${m.name}</p>
-                                    <p style="margin: 0; font-size: 0.7rem; color: var(--text-dim);">ID: ${m.id.substring(0, 8)}</p>
+                                    <p style="margin: 0; font-size: 0.7rem; color: var(--text-dim);">${m.role === 'supervisor' ? 'Supervisor' : 'Residente'} • ${assignedProjects.length} Obra(s) asignada(s)</p>
                                 </div>
                             </div>
-                            <div class="verified-badge" style="background: #10b98120; color: #10b981; border: 1px solid #10b98140;">VERIFICADO</div>
+                            <div class="verified-badge" style="background: ${m.status === 'active' ? '#10b98120' : '#ef444420'}; color: ${m.status === 'active' ? '#10b981' : '#ef4444'}; border: 1px solid ${m.status === 'active' ? '#10b98140' : '#ef444440'};">${m.status === 'active' ? 'ACTIVO' : 'INACTIVO'}</div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             `}
 
@@ -2657,6 +2614,86 @@ document.addEventListener('click', (e) => {
     }
 });
 
+window.HS_openWorkerDetail = async (workerId) => {
+    const maestros = await window.hDataService.getMaestros();
+    const projects = await window.hDataService.getProjects();
+    const m = maestros.find(x => x.id === workerId);
+    if (!m) return;
+    
+    const assignedProjects = projects.filter(p => p.assignedMaestroId === m.id);
+    
+    const content = `
+        <div style="text-align: center; margin-bottom: 24px;">
+            ${m.avatar ? `<img src="${m.avatar}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary); margin: 0 auto 12px;">` : `<div style="width: 80px; height: 80px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold; margin: 0 auto 12px;">${m.name[0]}</div>`}
+            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800;">${m.name}</h2>
+            <p style="margin: 4px 0 0; font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">${m.role === 'supervisor' ? 'Supervisor' : 'Residente'} • ${m.status === 'active' ? '<span style="color:#10b981;">ACTIVO</span>' : '<span style="color:#ef4444;">INACTIVO</span>'}</p>
+        </div>
+        
+        <h3 style="font-size: 0.9rem; margin-bottom: 12px; color: var(--text-main); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">Obras Asignadas (${assignedProjects.length})</h3>
+        ${assignedProjects.length > 0 ? `
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px;">
+                ${assignedProjects.map(p => `
+                    <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <p style="margin: 0; font-weight: 700; font-size: 0.85rem;">${p.name}</p>
+                            <p style="margin: 0; font-size: 0.7rem; color: var(--text-dim);">${p.clientName}</p>
+                        </div>
+                        <span style="font-size: 0.75rem; font-weight: 800; color: var(--primary);">${p.progress}%</span>
+                    </div>
+                `).join('')}
+            </div>
+        ` : `<p style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 24px; text-align: center;">No tiene obras asignadas actualmente.</p>`}
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <button class="btn-primary" onclick="alert('Modo edición en construcción.');" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border);">EDITAR PERFIL</button>
+            <button class="btn-primary" onclick="alert('Esta acción deshabilitará el acceso de este empleado al sistema.');" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);">DAR DE BAJA</button>
+        </div>
+    `;
+    
+    const modal = document.getElementById('report-modal');
+    document.getElementById('report-modal-content').innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h2 style="margin: 0; font-size: 1.1rem;">Perfil del Empleado</h2>
+            <button onclick="document.getElementById('report-modal').style.display='none'" style="background: none; border: none; color: var(--text-dim); font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        ${content}
+    `;
+    modal.style.display = 'block';
+};
+
+window.HS_openNewWorkerModal = () => {
+    const content = `
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div>
+                <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; display: block;">Nombre Completo</label>
+                <input type="text" placeholder="Ej. Juan Pérez" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: white;">
+            </div>
+            <div>
+                <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; display: block;">Correo de Acceso</label>
+                <input type="email" placeholder="ejemplo@grupohidro.com" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: white;">
+            </div>
+            <div>
+                <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; display: block;">Rol Asignado</label>
+                <select style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: white;">
+                    <option value="residente" style="color: black;">Residente de Obra</option>
+                    <option value="supervisor" style="color: black;">Supervisor</option>
+                </select>
+            </div>
+            <button class="btn-primary" onclick="alert('Se enviará una invitación al correo del nuevo empleado para que genere su contraseña.'); document.getElementById('report-modal').style.display='none';" style="margin-top: 16px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">CREAR EMPLEADO</button>
+        </div>
+    `;
+    
+    const modal = document.getElementById('report-modal');
+    document.getElementById('report-modal-content').innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h2 style="margin: 0; font-size: 1.1rem;">Nuevo Empleado</h2>
+            <button onclick="document.getElementById('report-modal').style.display='none'" style="background: none; border: none; color: var(--text-dim); font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        ${content}
+    `;
+    modal.style.display = 'block';
+};
+
 window.HS_openProjectDetails = (projectId) => {
     window.HS_openReportModal(projectId);
 };
@@ -2680,12 +2717,55 @@ async function render() {
         renderSkeletonDashboard();
     }
     else if (state.view === 'auth') renderAuth();
-    else if (state.view === 'client') await renderClientDashboard();
-    else if (state.view === 'maestro') await renderMaestroDashboard();
-    else if (state.view === 'admin') await renderAdminDashboard();
+    else if (state.view === 'client') {
+        renderSkeletonDashboard();
+        await new Promise(r => setTimeout(r, 10)); // Allow UI paint
+        await renderClientDashboard();
+    }
+    else if (state.view === 'maestro') {
+        renderSkeletonDashboard();
+        await new Promise(r => setTimeout(r, 10));
+        await renderMaestroDashboard();
+    }
+    else if (state.view === 'admin') {
+        renderSkeletonDashboard();
+        await new Promise(r => setTimeout(r, 10));
+        await renderAdminDashboard();
+    }
     else if (state.view === 'profile') window.HS_renderProfile();
     else if (state.view === 'chat') window.HS_openProjectChat();
     else if (state.view === 'maestro-detail') window.HS_openMaestroDetail();
+
+    renderRoleIndicator();
+}
+
+function renderRoleIndicator() {
+    if (!state.currentRole || state.view === 'auth') {
+        const existing = document.getElementById('role-indicator');
+        if (existing) existing.remove();
+        return;
+    }
+    
+    let indicator = document.getElementById('role-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'role-indicator';
+        indicator.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 6px 16px; border-radius: 20px; font-size: 0.65rem; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(8px); display: flex; align-items: center; gap: 6px;';
+        document.body.appendChild(indicator);
+    }
+    
+    let color = '#3b82f6'; // default blue
+    if (state.currentRole === 'cliente') color = '#10b981'; // green
+    if (state.currentRole === 'supervisor') color = '#f59e0b'; // yellow
+    if (state.currentRole === 'residente') color = '#3b82f6'; // blue
+    if (state.currentRole === 'jefe_residentes' || state.currentRole === 'gerencia' || state.currentRole === 'admin') color = '#ef4444'; // red
+    
+    let roleText = state.currentRole;
+    if (roleText === 'jefe_residentes') roleText = 'jefatura';
+    
+    indicator.style.background = `${color}cc`;
+    indicator.style.color = '#fff';
+    indicator.innerHTML = `<div style="width:6px;height:6px;border-radius:50%;background:white;box-shadow: 0 0 4px white;"></div> MODO: ${roleText}`;
 }
 
 function renderSkeletonDashboard() {
@@ -2714,6 +2794,161 @@ function renderSkeletonDashboard() {
         </div>
     `;
 }
+
+window.HS_openMaterialManagementModal = async (projectId) => {
+    const orders = await window.hDataService.getMaterialOrders(projectId);
+    
+    const content = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h2 style="margin: 0; font-size: 1.1rem;">Gestión de Materiales</h2>
+            <button class="btn-primary" style="width: auto; padding: 6px 12px; font-size: 0.75rem;" onclick="window.HS_openMaterialOrderModal('${projectId}')">+ NUEVO PEDIDO</button>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${orders.length ? orders.map(o => `
+                <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div>
+                            <span style="font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase;">ID: ${o.id.substring(0,6).toUpperCase()}</span>
+                            <p style="margin: 4px 0 0; font-size: 0.8rem; color: white; font-weight: 700;">Pedido por: ${o.creator?.full_name || 'Desconocido'}</p>
+                        </div>
+                        <div style="background: ${o.status === 'pending' ? '#f59e0b20' : o.status === 'approved' ? '#10b98120' : '#ef444420'}; color: ${o.status === 'pending' ? '#f59e0b' : o.status === 'approved' ? '#10b981' : '#ef4444'}; padding: 4px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 800; border: 1px solid ${o.status === 'pending' ? '#f59e0b40' : o.status === 'approved' ? '#10b98140' : '#ef444440'};">
+                            ${o.status === 'pending' ? 'PENDIENTE' : o.status === 'approved' ? 'APROBADO' : 'RECHAZADO'}
+                        </div>
+                    </div>
+                    
+                    <ul style="margin: 0 0 16px; padding-left: 20px; color: var(--text-main); font-size: 0.85rem;">
+                        ${(o.items_json || []).map(item => `<li>${item.quantity} ${item.unit} de ${item.name}</li>`).join('')}
+                    </ul>
+                    
+                    <div style="display: flex; gap: 8px;">
+                        <button style="flex: 1; background: transparent; border: 1px solid var(--border); color: var(--text-main); padding: 8px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="window.HS_editMaterialOrder('${o.id}', '${projectId}')">EDITAR CANTIDAD</button>
+                        <button style="flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 8px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; cursor: pointer;" onclick="window.HS_deleteMaterialOrder('${o.id}', '${projectId}')">ELIMINAR</button>
+                    </div>
+                </div>
+            `).join('') : '<p class="text-dim" style="font-size: 0.8rem; text-align: center;">No hay pedidos de material para esta obra.</p>'}
+        </div>
+    `;
+    
+    const modal = document.getElementById('report-modal');
+    document.getElementById('report-modal-content').innerHTML = `
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+            <button onclick="document.getElementById('report-modal').style.display='none'" style="background: none; border: none; color: var(--text-dim); font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        ${content}
+    `;
+    modal.style.display = 'block';
+};
+
+window.HS_openMaterialOrderModal = (projectId) => {
+    document.getElementById('report-modal').style.display = 'none'; // Close prev modal
+    const modal = document.getElementById('modal-container');
+    modal.innerHTML = `
+        <div class="fade-in" style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(20px); z-index: 1000; display: flex; align-items: flex-end; justify-content: center;">
+            <div class="glass-card" style="width: 100%; max-width: 500px; border-radius: 40px 40px 0 0; padding: 40px 24px; border: 1px solid rgba(255,255,255,0.1); background: #0f172a;">
+                <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800;">Pedir Material</h2>
+                        <p class="text-dim" style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #10b981; margin-top: 4px;">• Obra Actual</p>
+                    </div>
+                    <button onclick="document.getElementById('modal-container').innerHTML=''; window.HS_openMaterialManagementModal('${projectId}')" style="background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">&times;</button>
+                </header>
+                <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+                    <select id="mo-item" style="width: 100%; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none; margin-bottom: 12px;">
+                        <option value="" disabled selected style="color: black;">Seleccionar material del catálogo...</option>
+                        <option value="Tubo PVC 4 pulgadas" style="color: black;">Tubo PVC 4 pulgadas</option>
+                        <option value="Tubo PVC 2 pulgadas" style="color: black;">Tubo PVC 2 pulgadas</option>
+                        <option value="Cemento Sol (Saco)" style="color: black;">Cemento Sol (Saco)</option>
+                        <option value="Arena Gruesa (m3)" style="color: black;">Arena Gruesa (m3)</option>
+                        <option value="Ladrillo King Kong" style="color: black;">Ladrillo King Kong</option>
+                        <option value="Fierro Corrugado 1/2" style="color: black;">Fierro Corrugado 1/2"</option>
+                        <option value="Pegamento PVC" style="color: black;">Pegamento PVC (Galón)</option>
+                    </select>
+                    <div style="display: flex; gap: 12px;">
+                        <input type="number" id="mo-qty" placeholder="Cantidad" style="flex: 1; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white;">
+                        <select id="mo-unit" style="flex: 1; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: white; cursor: pointer; appearance: none;">
+                            <option value="Unidades" style="color: black;">Unidades</option>
+                            <option value="Metros" style="color: black;">Metros</option>
+                            <option value="Sacos" style="color: black;">Sacos</option>
+                            <option value="m3" style="color: black;">m3</option>
+                            <option value="Galones" style="color: black;">Galones</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="window.HS_submitMaterialOrder('${projectId}')" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">ENVIAR A APROBACIÓN</button>
+            </div>
+        </div>
+    `;
+};
+
+window.HS_submitMaterialOrder = async (projectId) => {
+    const item = document.getElementById('mo-item').value;
+    const qty = document.getElementById('mo-qty').value;
+    const unit = document.getElementById('mo-unit').value;
+    
+    if (!item || !qty || !unit) return alert('Completa todos los campos del pedido.');
+    
+    const orderData = {
+        projectId: projectId,
+        userId: state.currentUser.id,
+        items: [{ name: item, quantity: qty, unit: unit }]
+    };
+    
+    const ok = await window.hDataService.createMaterialOrder(orderData);
+    if (ok) {
+        alert('Pedido de materiales creado con éxito.');
+        document.getElementById('modal-container').innerHTML = '';
+        window.HS_openMaterialManagementModal(projectId); // Refresh list
+    } else {
+        alert('Error al enviar pedido.');
+    }
+};
+
+window.HS_deleteMaterialOrder = async (orderId, projectId) => {
+    if(!confirm('¿Estás seguro de eliminar este pedido?')) return;
+    const ok = await window.hDataService.deleteMaterialOrder(orderId, state.currentUser.id);
+    if(ok) {
+        alert('Pedido eliminado correctamente.');
+        if (state.view === 'admin' && state.adminTab === 'materiales') {
+            render();
+        } else {
+            window.HS_openMaterialManagementModal(projectId); // Refresh list
+        }
+    } else {
+        alert('No se pudo eliminar el pedido.');
+    }
+};
+
+window.HS_editMaterialOrder = async (orderId, projectId) => {
+    const orders = await window.hDataService.getMaterialOrders(projectId);
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    // For simplicity, we assume we're editing the first item's quantity
+    const firstItem = order.items_json && order.items_json[0] ? order.items_json[0] : null;
+    if (!firstItem) return alert('No hay ítems en este pedido para editar.');
+
+    const newQty = prompt(`Nueva cantidad para "${firstItem.name}" (${firstItem.unit}):`, firstItem.quantity);
+    if (newQty === null || newQty.trim() === '') return;
+    
+    const qtyNum = parseFloat(newQty);
+    if (isNaN(qtyNum)) return alert('Cantidad inválida.');
+
+    const updatedItems = [...order.items_json];
+    updatedItems[0].quantity = qtyNum;
+
+    const ok = await window.hDataService.editMaterialOrder(orderId, updatedItems, state.currentUser.id);
+    if(ok) {
+        alert('Pedido actualizado correctamente.');
+        if (state.view === 'admin' && state.adminTab === 'materiales') {
+            render();
+        } else {
+            window.HS_openMaterialManagementModal(projectId); // Refresh list
+        }
+    } else {
+        alert('No se pudo actualizar el pedido.');
+    }
+};
 
 // Initializing the app
 initApp();

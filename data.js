@@ -28,9 +28,20 @@ class DataService {
             `)
             .order('created_at', { ascending: false });
 
-        if (error) {
-            console.error('Error fetching projects:', error);
-            return [];
+        if (error || !data || data.length === 0) {
+            console.warn('No projects found or error fetching projects, using mock:', error?.message);
+            const mock = this.fallbackProjects();
+            
+            // Merge Demo Updates if any into mock
+            this.demoUpdates.forEach(du => {
+                const project = mock.find(p => p.id === du.project_id);
+                if (project) {
+                    if(!du.status) du.status = 'pending_supervisor';
+                    project.updates.push(du);
+                }
+            });
+            mock.forEach(p => { p.updates.sort((a, b) => new Date(b.date) - new Date(a.date)); });
+            return mock;
         }
 
         // Map Supabase structure to the expected frontend structure
@@ -94,13 +105,57 @@ class DataService {
         return maestros.map(m => ({
             id: m.id,
             name: m.full_name || 'Maestro Demo',
-            avatar: m.avatar_url
+            avatar: m.avatar_url,
+            role: m.role || 'residente',
+            status: m.status || 'active'
         }));
     }
 
     fallbackMaestros() {
         return [
-            { id: '00000000-0000-0000-0000-000000000003', name: 'Juan Pérez (Demo)', avatar: '' }
+            { id: '00000000-0000-0000-0000-000000000003', name: 'Residente Demo', role: 'residente', status: 'active', avatar: '' },
+            { id: '00000000-0000-0000-0000-000000000005', name: 'Supervisor Demo', role: 'supervisor', status: 'active', avatar: '' },
+            { id: 'maestro-3', name: 'Carlos Martinez', role: 'residente', status: 'inactive', avatar: '' }
+        ];
+    }
+
+    fallbackProjects() {
+        return [
+            {
+                id: '00000000-0000-0000-0000-000000000001',
+                name: 'Urbanización Los Senderos',
+                clientName: 'Cliente Demo',
+                assignedMaestroId: '00000000-0000-0000-0000-000000000003',
+                maestroName: 'Residente Demo',
+                status: 'executing',
+                progress: 65,
+                updates: [
+                    { id: 'u1', date: '2026-02-10', description: 'Instalación de tuberías principales terminada.', status: 'approved', photos: [], responsible: 'Residente Demo' },
+                    { id: 'u2', date: '2026-02-12', description: 'Pruebas de presión de agua superadas en el bloque A.', status: 'pending_supervisor', photos: [], responsible: 'Residente Demo' }
+                ]
+            },
+            {
+                id: 'proj-2',
+                name: 'Torre Empresarial Z',
+                clientName: 'Cliente Demo',
+                assignedMaestroId: '00000000-0000-0000-0000-000000000003',
+                maestroName: 'Residente Demo',
+                status: 'delayed',
+                progress: 20,
+                updates: [
+                    { id: 'u3', date: '2026-02-14', description: 'Retraso por falta de material (Válvulas 3/4).', status: 'pending_jefatura', photos: [], responsible: 'Residente Demo', client_comment: 'Necesitamos solucionar esto rápido por favor.' }
+                ]
+            },
+            {
+                id: 'proj-3',
+                name: 'Plaza del Sol (Etapa 1)',
+                clientName: 'Cliente Demo',
+                assignedMaestroId: '00000000-0000-0000-0000-000000000003',
+                maestroName: 'Residente Demo',
+                status: 'completed',
+                progress: 100,
+                updates: []
+            }
         ];
     }
 
@@ -527,7 +582,7 @@ class DataService {
     // --- NUEVAS FUNCIONES PARA MATERIALES Y VALIDACIÓN ---
 
     async getMaterialOrders(projectId) {
-        if (!window.hSupabase) return [];
+        if (!window.hSupabase) return this.fallbackMaterialOrders(projectId);
         const { data, error } = await window.hSupabase
             .from('material_orders')
             .select(`
@@ -538,18 +593,32 @@ class DataService {
             .eq('project_id', projectId)
             .order('created_at', { ascending: false });
 
-        if (error) {
-            // Mock data for demo
-            return [
-                { id: 'mo-1', project_id: projectId, status: 'pending', items_json: [{name: 'Cemento', quantity: 20, unit: 'Sacos'}], created_at: new Date().toISOString() }
-            ];
+        if (error || !data || data.length === 0) {
+            return this.fallbackMaterialOrders(projectId);
         }
         return data;
     }
 
+    fallbackMaterialOrders(projectId) {
+        if (!this._mockMaterialOrders) {
+            this._mockMaterialOrders = [
+                { id: 'mo-1', project_id: '00000000-0000-0000-0000-000000000001', status: 'pending', items_json: [{name: 'Cemento', quantity: 20, unit: 'Sacos'}], created_at: new Date().toISOString(), creator: { full_name: 'Residente Demo' } }
+            ];
+        }
+        return this._mockMaterialOrders.filter(o => o.project_id === projectId);
+    }
     async createMaterialOrder(orderData) {
         if (!window.hSupabase) {
-            console.warn('Demo Mode: Material order created locally');
+            if (!this._mockMaterialOrders) this._mockMaterialOrders = [];
+            this._mockMaterialOrders.push({
+                id: 'mo-' + Math.random().toString(36).substr(2, 5),
+                project_id: orderData.projectId,
+                status: 'pending',
+                items_json: orderData.items,
+                created_at: new Date().toISOString(),
+                creator: { full_name: window.state?.currentUser?.name || 'Usuario' }
+            });
+            this.logActivity('material_orders', 'new', 'CREATE', orderData.userId, 'Nuevo pedido de materiales creado', null, orderData.items);
             return true;
         }
         const { error } = await window.hSupabase
@@ -566,6 +635,51 @@ class DataService {
             return false;
         }
         return true;
+    }
+
+    async editMaterialOrder(orderId, newItems, userId) {
+        if (!window.hSupabase) {
+            const order = this._mockMaterialOrders?.find(o => o.id === orderId);
+            if (order) {
+                const oldItems = order.items_json;
+                order.items_json = newItems;
+                this.logActivity('material_orders', orderId, 'UPDATE', userId, 'Pedido de materiales modificado', { items: oldItems }, { items: newItems });
+                return true;
+            }
+            return false;
+        }
+
+        const { data, error } = await window.hSupabase
+            .from('material_orders')
+            .update({ items_json: newItems })
+            .eq('id', orderId)
+            .select();
+
+        if (!error && data) {
+             this.logActivity('material_orders', orderId, 'UPDATE', userId, 'Pedido de materiales modificado');
+        }
+        return !error;
+    }
+
+    async deleteMaterialOrder(orderId, userId) {
+        if (!window.hSupabase) {
+            if (this._mockMaterialOrders) {
+                this._mockMaterialOrders = this._mockMaterialOrders.filter(o => o.id !== orderId);
+                this.logActivity('material_orders', orderId, 'DELETE', userId, 'Pedido de materiales eliminado');
+                return true;
+            }
+            return false;
+        }
+
+        const { error } = await window.hSupabase
+            .from('material_orders')
+            .delete()
+            .eq('id', orderId);
+
+        if (!error) {
+            this.logActivity('material_orders', orderId, 'DELETE', userId, 'Pedido de materiales eliminado');
+        }
+        return !error;
     }
 
     async updateMaterialOrderStatus(orderId, status, userId) {

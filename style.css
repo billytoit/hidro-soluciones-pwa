@@ -136,6 +136,10 @@ body {
     padding: 24px 20px;
 }
 
+.container-admin {
+    max-width: 1200px;
+}
+
 /* Stitch Components */
 .glass-card {
     background: var(--surface);
