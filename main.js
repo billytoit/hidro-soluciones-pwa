@@ -74,17 +74,7 @@ function renderAuth() {
     document.getElementById('demo-cliente').onclick = async () => {
         state.view = 'client';
         state.currentRole = 'cliente';
-        const projects = await window.hDataService.getProjects();
-        state.currentProject = projects[0] || {
-            id: '00000000-0000-0000-0000-000000000001',
-            name: 'Proyecto Demo (Ejemplo)',
-            clientName: 'Cliente Demo',
-            progress: 65,
-            status: 'executing',
-            updates: [
-                { id: 'u1', date: '2026-02-10', description: 'Instalación de tuberías principales terminada.', status: 'approved', photos: [] }
-            ]
-        };
+        state.currentProject = null; // Forza a evaluar si hay múltiples proyectos
         state.currentUser = { id: '00000000-0000-0000-0000-000000000002', name: 'Cliente Demo' };
         render();
     };
@@ -146,7 +136,32 @@ function renderAuth() {
 }
 
 // --- CLIENT VIEW ---
-async function renderClientDashboard() {
+    if (!state.currentProject) {
+        const allProjects = await window.hDataService.getProjects();
+        let clientProjects = allProjects.filter(p => p.clientName === state.currentUser.name);
+        
+        // Mocking for Demo
+        if (state.currentUser.name === 'Cliente Demo') {
+            const baseProject = allProjects[0] || { updates: [], clientName: 'Cliente Demo' };
+            clientProjects = [
+                { ...baseProject, id: 'proj-1', name: 'Urbanización Los Senderos', progress: 65, status: 'executing' },
+                { ...baseProject, id: 'proj-2', name: 'Torre Empresarial Z', progress: 20, status: 'delayed' }
+            ];
+            state.clientHasMultipleProjects = true;
+        } else {
+            state.clientHasMultipleProjects = clientProjects.length > 1;
+        }
+
+        if (clientProjects.length === 1) {
+            state.currentProject = clientProjects[0];
+        } else if (clientProjects.length > 1) {
+            return renderClientHomeDashboard(clientProjects);
+        } else {
+            appContainer.innerHTML = '<div style="padding:40px;text-align:center;"><p class="text-dim">No tienes proyectos asignados.</p></div>';
+            return;
+        }
+    }
+
     const p = state.currentProject;
 
     // Fetch full timeline (Updates + Payments + Audit Logs)
@@ -465,10 +480,92 @@ async function renderClientDashboard() {
             state.view = 'admin';
             render();
         } else {
-            if (state.session) await window.hSupabase.auth.signOut();
-            state.view = 'auth';
-            render();
+            if (state.clientHasMultipleProjects) {
+                state.currentProject = null;
+                render();
+            } else {
+                if (state.session) await window.hSupabase.auth.signOut();
+                state.view = 'auth';
+                render();
+            }
         }
+    };
+}
+
+function renderClientHomeDashboard(projects) {
+    const active = projects.filter(p => p.status === 'executing').length;
+    const delayed = projects.filter(p => p.status === 'delayed').length;
+    const avgProgress = Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length);
+
+    appContainer.innerHTML = `
+        <div class="container fade-in" style="padding-bottom: 120px;">
+            <header style="margin-bottom: 40px; display: flex; align-items: center; justify-content: space-between; padding-top: 10px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="btn-logout-client" style="background: rgba(255,255,255,0.05); border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-dim);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+                    </button>
+                    <h1 style="font-size: 1.2rem; margin: 0; font-weight: 800;">Tus Obras</h1>
+                </div>
+                <div style="cursor: pointer;" onclick="window.HS_renderProfile()">
+                    <div class="avatar avatar-placeholder">${state.currentUser.name[0]}</div>
+                </div>
+            </header>
+
+            <div class="glass-card" style="margin-bottom: 32px; padding: 24px; border: none; background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);">
+                <span style="font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase;">Consolidado General</span>
+                <h2 style="margin: 4px 0 16px; font-size: 1.5rem; font-weight: 800; color: white;">${state.currentUser.name}</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
+                        <span style="font-size: 1.5rem; font-weight: 800; color: white;">${projects.length}</span>
+                        <p style="margin: 0; font-size: 0.75rem; color: var(--text-dim);">Obras Totales</p>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
+                        <span style="font-size: 1.5rem; font-weight: 800; color: var(--primary);">${avgProgress}%</span>
+                        <p style="margin: 0; font-size: 0.75rem; color: var(--text-dim);">Avance Promedio</p>
+                    </div>
+                    ${delayed > 0 ? `
+                    <div style="grid-column: span 2; background: rgba(239, 68, 68, 0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                        <p style="margin: 0; font-size: 0.85rem; color: white; font-weight: 800;"><span style="color: #ef4444;">⚠</span> Tienes ${delayed} obra(s) con observaciones o retrasos.</p>
+                    </div>` : ''}
+                </div>
+            </div>
+
+            <h3 style="font-size: 1rem; margin-bottom: 16px; color: var(--text-main); font-weight: 800;">Detalle por Obra</h3>
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                ${projects.map(p => {
+                    const statusColor = p.status === 'delayed' ? '#f59e0b' : p.status === 'completed' ? '#10b981' : 'var(--primary)';
+                    return `
+                    <div class="glass-card" style="padding: 20px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05);" onclick="window.HS_selectProject('${p.id}')">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <div>
+                                <h4 style="margin: 0 0 4px; font-size: 1.1rem; font-weight: 800; color: white;">${p.name}</h4>
+                                <p style="margin: 0; font-size: 0.8rem; color: var(--text-dim);">Estado: ${p.status === 'delayed' ? 'Con observaciones' : 'En ejecución'}</p>
+                            </div>
+                            <span style="font-size: 1.2rem; font-weight: 800; color: ${statusColor};">${p.progress}%</span>
+                        </div>
+                        <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                            <div style="width: ${p.progress}%; height: 100%; background: ${statusColor}; border-radius: 3px;"></div>
+                        </div>
+                    </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+
+    document.getElementById('btn-logout-client').onclick = async () => {
+        if (state.session) await window.hSupabase.auth.signOut();
+        state.session = null;
+        state.currentUser = null;
+        state.view = 'auth';
+        render();
+    };
+
+    window.HS_selectProject = (id) => {
+        // Hacemos el assignment guardando clientProjects en local o re-evaluando
+        // Para simplificar, forzamos set currentProject
+        state.currentProject = projects.find(p => p.id === id);
+        render();
     };
 }
 
